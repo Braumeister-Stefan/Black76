@@ -8,7 +8,7 @@ from scipy.stats import norm
 
 # This script uses bloomberg and BoE inputs to price ATM European swaptions.
 # OTM & ITM pricing is possible with some caveats
-# ATM strikes and implied volatilities of unquoted swaptions are interpolated using cubic spline algorithm
+# ATM strikes and implied volatilities of unquoted swaptions are interpolated using a cubic spline algorithm
 
 #Define the Black model (source Black, 76)
 
