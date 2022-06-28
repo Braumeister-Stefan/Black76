@@ -4,122 +4,120 @@ import numpy as np
 from scipy import interpolate
 from scipy.stats import norm
 
-#Introduction
+
+# Introduction
 
 # This script uses bloomberg and BoE inputs to price ATM European swaptions.
-# OTM & ITM pricing is possible with some caveats
+# off the money pricing is possible with some caveats (instructions on line 37, 47,48)
 # ATM strikes and implied volatilities of unquoted swaptions are interpolated using a cubic spline algorithm
 
-#Define the Black model (source Black, 76)
+# Define the Black model (source Black, 76)
 
 def BlackPrice(Nominal, FuturePrice, StrikePrice, Maturity, RiskFreeRate, Volatility, type):
-    d1 = (np.log(FuturePrice/StrikePrice)+(0.5*Volatility**2)*Maturity)/(Volatility*np.sqrt(Maturity))
-    d2 = (np.log(FuturePrice/StrikePrice)-(0.5*Volatility**2)*Maturity)/(Volatility*np.sqrt(Maturity))
+    d1 = (np.log(FuturePrice / StrikePrice) + (0.5 * Volatility ** 2) * Maturity) / (Volatility * np.sqrt(Maturity))
+    d2 = (np.log(FuturePrice / StrikePrice) - (0.5 * Volatility ** 2) * Maturity) / (Volatility * np.sqrt(Maturity))
     if type == "PAYER":
-        BlackPayer = np.exp(-RiskFreeRate*Maturity)*(StrikePrice*norm.cdf(-d2)-FuturePrice*norm.cdf(-d1))*Nominal
-        return(BlackPayer)
+        BlackPayer = np.exp(-RiskFreeRate * Maturity) * (
+                    StrikePrice * norm.cdf(-d2) - FuturePrice * norm.cdf(-d1)) * Nominal
+        return (BlackPayer)
     elif type == "RECEIVER":
-        BlackReceiver = np.exp(-RiskFreeRate*Maturity)*(FuturePrice*norm.cdf(d1)-StrikePrice*norm.cdf(d2))*Nominal
-        return(BlackReceiver)
+        BlackReceiver = np.exp(-RiskFreeRate * Maturity) * (
+                    FuturePrice * norm.cdf(d1) - StrikePrice * norm.cdf(d2)) * Nominal
+        return (BlackReceiver)
     else:
         print("type not specified")
 
-#Load market data
+
+# Load market data
 
 path = os.getcwd()
 date = "21/6/2022"
 
-#Load the volatility,ATM strikes and GBP spot curve
+# Load the volatility,ATM strikes and GBP spot curve
 
 Volcubes = path + "\BBG\Volcubes.xlsx"
 Spotrates = path + "\BOE_curve_21-6.xlsx"
 
-black_vols = pd.read_excel(Volcubes, "black_vols", index_col=0)
-black_strikes = pd.read_excel(Volcubes, "black_strikes",index_col=0)
+black_vols = pd.read_excel(Volcubes, "black_vols", index_col=0)  # set to black220_vols for OTM example
+black_strikes = pd.read_excel(Volcubes, "black_strikes", index_col=0)
 BOE_curve = pd.read_excel(Spotrates, "rf")
 
-#select swaption parameters
+# select swaption parameters
 
 nominal = 1
 expiry = 0.5
 swap_tenor = 10
 
-strike = "ATM" # ATM or positive value
-fwd = None #If None, will be deduced from ATM strike rates.
+strike = "ATM"  # ATM or positive value (set to 2.2 for off the money example)
+fwd = None  # If None, will be deduced from ATM strike rates. (for off the money example, selecte from ATM strike rates)
 
-type = "PAYER" # payer or receiver
+type = "PAYER"  # payer or receiver
 
-rf = "BOE" #BOE or value
-vol = "IMP" #IMP or value
+rf = "BOE"  # BOE or value
+vol = "IMP"  # IMP or value
 
-#Retrieving and interpolation of market parameters
+# Retrieving and interpolation of market parameters
 
-#interpolate the risk-free rate (sourced from BoE)
+# interpolate the risk-free rate (sourced from BoE)
 
-if rf =="BOE":
+if rf == "BOE":
     x = np.asarray(BOE_curve.columns)
     if expiry in x:
-        rf= BOE_curve[expiry][0]
+        rf = BOE_curve[expiry][0]
         print("risk free rate for specified tenor retrieved from BoE with value " + str(rf))
     else:
-        y= np.asarray(BOE_curve)[0]
-        splinef_rf = interpolate.splrep(x,y)
+        y = np.asarray(BOE_curve)[0]
+        splinef_rf = interpolate.splrep(x, y)
         rf = interpolate.splev(expiry, splinef_rf)
         print("risk free rate for specified tenor retrieved and interpolated from BoE with value " + str(rf))
 
-#select (and potentially interpolate) implied volatility
+# select (and potentially interpolate) implied volatility
 
 x = np.asarray(black_vols.index)
-if vol =="IMP":
+interpolated = 0
+if vol == "IMP":
 
-    interpolated = 0
     if expiry in x:
         vol = black_vols.loc[expiry][swap_tenor]
-        print("implied volatility retrieved from cube as "+ str(vol))
+        print("implied volatility retrieved from cube as " + str(vol))
     else:
-        y= black_vols[swap_tenor]
-        splinef_vol = interpolate.splrep(x,y)
+        y = black_vols[swap_tenor]
+        splinef_vol = interpolate.splrep(x, y)
         vol = interpolate.splev(expiry, splinef_vol)
-        print("warning: volatility is interpolated from cube as "+ str(vol))
+        print("warning: volatility is interpolated from cube as " + str(vol))
         interpolated = 1
 
-#select (and potentially interpolate) strike
+# select (and potentially interpolate) strike
 if strike == "ATM":
     if interpolated == 0:
         strike = black_strikes.loc[expiry][swap_tenor]
         print("selected strike as the ATM strike with value " + str(strike))
     else:
-        y= black_strikes[swap_tenor]
-        splinef_k = interpolate.splrep(x,y)
+        y = black_strikes[swap_tenor]
+        splinef_k = interpolate.splrep(x, y)
         strike = interpolate.splev(expiry, splinef_k)
-        print("warning: strike is interpolated from ATM strikes (low accuracy) with value "+ str(strike))
+        print("warning: strike is interpolated from ATM strikes (low accuracy) with value " + str(strike))
 
-#set fwd spot rate equal to ATM strike rate (by definition these should be equal)
+# set fwd spot rate equal to ATM strike rate (by definition these should be equal)
 
 if fwd == None:
     fwd = strike
     print("forward rate on the market deduced from ATM strike")
 
-
-#Generate output
+# Generate output
 
 price = BlackPrice(nominal, fwd, strike, expiry, rf, vol, type)
 
-#Store output
+# Store output
 
-print("Priced a European "+ type.lower() + " swaption with an expiry of " + str(expiry) + ",a tenor of " + str(swap_tenor) + ", a strike price of "+ str(strike) + " and a nominal of " + str(nominal)+ ".")
-print("The premium is worth £" + str(round(price,2)) + ".")
+print("Priced a European " + type.lower() + " swaption with an expiry of " + str(expiry) + ",a tenor of " + str(
+    swap_tenor) + ", a strike price of " + str(strike) + " and a nominal of " + str(nominal) + ".")
+print("The premium is worth £" + str(round(price, 2)) + ".")
 pricing = [date, nominal, fwd, strike, expiry, rf, vol, swap_tenor, type, price, interpolated]
-pricing_index = ["date","nominal","fwd","strike","expiry","rf","vol","tenor","type","price","interpolated"]
+pricing_index = ["date", "nominal", "fwd", "strike", "expiry", "rf", "vol", "tenor", "type", "price", "interpolated"]
 pricing = pd.DataFrame(pricing, index=pricing_index)
 
 print("Output stored succesfully!")
 
-with pd.ExcelWriter("Output.xlsx", mode="a",if_sheet_exists = "new") as writer:
-    pricing.to_excel(writer, sheet_name= str(expiry) +"x"+ str(swap_tenor)+".")
-
-
-
-
-
-
+with pd.ExcelWriter("Output.xlsx", mode="a", if_sheet_exists="new") as writer:
+    pricing.to_excel(writer, sheet_name=str(expiry) + "x" + str(swap_tenor) + ".")
